@@ -22,6 +22,7 @@ FIX_NETWORK_AUTH=false
 SET_SOLID_BG=false
 DISABLE_ENCRYPTION=false
 PERSISTENT_SESSIONS=false
+MINIMAL_KDE=false
 BG_COLOR="#2b2b2b"
 DRY_RUN=false
 
@@ -47,6 +48,7 @@ OPTIONS:
     --solid-bg [COLOR]      Set solid background (default: #2b2b2b)
     --no-encryption         Disable encryption for LAN (better performance)
     --persistent-sessions   Enable persistent sessions (reconnect to same session)
+    --minimal-kde           Make KDE minimal and snappy like Rocky Linux GNOME
     
 EXAMPLES:
     $0 --dry-run --all                 # Preview all changes
@@ -78,6 +80,7 @@ while [[ $# -gt 0 ]]; do
             SET_SOLID_BG=true
             DISABLE_ENCRYPTION=true
             PERSISTENT_SESSIONS=true
+            MINIMAL_KDE=true
             shift
             ;;
         --install)
@@ -115,6 +118,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --persistent-sessions)
             PERSISTENT_SESSIONS=true
+            shift
+            ;;
+        --minimal-kde)
+            MINIMAL_KDE=true
             shift
             ;;
         *)
@@ -202,6 +209,19 @@ show_dry_run_summary() {
         echo "   - Set KillDisconnected=false in /etc/xrdp/sesman.ini"
         echo "   - Set DisconnectedTimeLimit=0 (no timeout)"
         echo "   - Allow reconnection to existing sessions"
+        echo ""
+    fi
+    
+    if [ "$MINIMAL_KDE" = true ]; then
+        print_msg "🚀 MINIMAL KDE (Rocky Linux GNOME-like snappiness):" "$GREEN"
+        echo "   - Reduce animation speed by 50%"
+        echo "   - Disable Baloo file indexing service"
+        echo "   - Disable blur effects"
+        echo "   - Disable transparency/contrast effects"
+        echo "   - Disable window shadows"
+        echo "   - Disable smooth scrolling in applications"
+        echo "   - Set faster menu/tooltip delays"
+        echo "   - NOTE: Logout required for full effect"
         echo ""
     fi
     
@@ -497,6 +517,92 @@ configure_persistent_sessions() {
     print_msg "Persistent sessions configured" "$GREEN"
 }
 
+# Configure minimal KDE for Rocky Linux GNOME-like performance
+configure_minimal_kde() {
+    print_msg "Configuring minimal KDE for maximum performance..." "$BLUE"
+    
+    # Reduce animation duration (0.5 = 50% speed, 0 = instant)
+    kwriteconfig5 --file kdeglobals --group KDE --key AnimationDurationFactor 0.25
+    print_msg "  - Animation speed increased 4x" "$GREEN"
+    
+    # Disable Baloo file indexing
+    if command -v balooctl &> /dev/null; then
+        balooctl disable 2>/dev/null || true
+        balooctl purge 2>/dev/null || true
+        print_msg "  - Baloo file indexing disabled" "$GREEN"
+    else
+        # Alternative method if balooctl not available
+        kwriteconfig5 --file baloofilerc --group Basic --group Settings --key "Indexing-Enabled" false
+        systemctl --user stop kde-baloo.service 2>/dev/null || true
+        systemctl --user disable kde-baloo.service 2>/dev/null || true
+        print_msg "  - Baloo file indexing disabled (via config)" "$GREEN"
+    fi
+    
+    # Disable KDE visual effects
+    kwriteconfig5 --file kwinrc --group Plugins --key blurEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key contrastEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_dimscreenEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_fadeEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_fadingpopupsEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_frozenappEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_fullscreenEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_loginEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_logoutEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_maximizeEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_morphingpopupsEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_scaleEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_sessionquitEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_squashEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_translucencyEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_windowapertureEnabled false
+    kwriteconfig5 --file kwinrc --group Plugins --key slidingpopupsEnabled false
+    print_msg "  - KDE visual effects disabled" "$GREEN"
+    
+    # Disable shadows
+    kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_shadowEnabled false
+    print_msg "  - Window shadows disabled" "$GREEN"
+    
+    # Disable smooth scrolling
+    kwriteconfig5 --file kdeglobals --group KDE --key ScrollbarLeftClickNavigatesByPage true
+    kwriteconfig5 --file kcminputrc --group Mouse --key ScrollSpeed 3
+    print_msg "  - Smooth scrolling disabled" "$GREEN"
+    
+    # Set faster tooltips and menu delays
+    kwriteconfig5 --file kdeglobals --group KDE --key ToolTipDelay 100
+    kwriteconfig5 --file kdeglobals --group KDE --key StartDragDist 4
+    print_msg "  - Menu/tooltip delays reduced" "$GREEN"
+    
+    # Reduce systray animation
+    kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc --group Containments --group 2 --group General --key animationSpeed 1
+    
+    # Disable file previews in Dolphin
+    kwriteconfig5 --file dolphinrc --group General --key ShowToolTips false
+    kwriteconfig5 --file dolphinrc --group PreviewSettings --key Plugins ""
+    print_msg "  - File manager previews disabled" "$GREEN"
+    
+    # Disable unnecessary KDE services
+    systemctl --user disable kactivitymanagerd.service 2>/dev/null || true
+    systemctl --user stop kactivitymanagerd.service 2>/dev/null || true
+    print_msg "  - Unnecessary services disabled" "$GREEN"
+    
+    # Update the xsession to ensure compositing stays off
+    if grep -q "KWIN_COMPOSE=N" ~/.xsession 2>/dev/null; then
+        print_msg "  - Compositing already disabled in xsession" "$YELLOW"
+    else
+        sed -i '/# Disable compositing/i\
+# Force minimal KDE settings\
+export QT_QUICK_BACKEND=software' ~/.xsession 2>/dev/null || true
+    fi
+    
+    # Try to reload KWin if in a KDE session
+    if [ -n "$DISPLAY" ]; then
+        qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
+    fi
+    
+    print_msg "Minimal KDE configuration completed" "$GREEN"
+    print_msg "NOTE: Logout and login required for full effect!" "$YELLOW"
+}
+
 # Main execution
 print_msg "=== xRDP Setup for Kubuntu ===" "$BLUE"
 
@@ -536,6 +642,10 @@ fi
 
 if [ "$PERSISTENT_SESSIONS" = true ]; then
     configure_persistent_sessions
+fi
+
+if [ "$MINIMAL_KDE" = true ]; then
+    configure_minimal_kde
 fi
 
 # Restart services if any changes were made

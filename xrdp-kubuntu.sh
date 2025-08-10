@@ -147,6 +147,7 @@ show_dry_run_summary() {
         print_msg "📦 INSTALL xRDP:" "$GREEN"
         echo "   - Install packages: xrdp, xorgxrdp, xcursor-themes, dmz-cursor-theme, imagemagick"
         echo "   - Enable and start xrdp and xrdp-sesman services"
+        echo "   - Configure UFW firewall to allow port 3389/tcp (if UFW is active)"
         echo ""
     fi
     
@@ -243,6 +244,13 @@ install_xrdp() {
     sudo systemctl enable xrdp-sesman
     sudo systemctl start xrdp
     sudo systemctl start xrdp-sesman
+    
+    # Configure firewall if UFW is active
+    if sudo ufw status | grep -q "Status: active"; then
+        print_msg "Configuring firewall to allow RDP port 3389..." "$BLUE"
+        sudo ufw allow 3389/tcp
+        print_msg "Firewall rule added for port 3389" "$GREEN"
+    fi
     
     print_msg "xRDP installation completed" "$GREEN"
 }
